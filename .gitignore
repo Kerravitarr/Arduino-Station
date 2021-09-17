@@ -24,3 +24,6 @@ hs_err_pid*
 /bin/
 .project
 .classpath
+ArduinoApplication/ArduinoPorts/Debug/
+ArduinoApplication/.vs/ArduinoPorts/v14/.atsuo
+*.atsln
