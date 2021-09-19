@@ -1,5 +1,6 @@
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.EventQueue;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
@@ -15,6 +16,7 @@ import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -42,26 +44,30 @@ import WorkingModes.WorkingModes;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.JMenuBar;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 public class MainScreen extends JFrame  implements PortEventListener, StatusEventListener{
 
 	private JPanel contentPane;
-	private final byte STK_OK = 0x10;
 	
-	public final Setings					Se				= new Setings();
+	public final Setings Se = new Setings();
 	JComboBox<ComPorts> portSelected = new JComboBox<ComPorts>();
 	JPopupMenu menuAddDelComPort = new JPopupMenu();
 	JTextPane textArea = new JTextPane();
 	JPanel StatusPanel = new JPanel();
 	JLabel lblNewLabel = new JLabel("O");
 	JComboBox<String> baudRate = new JComboBox<String>();
-	private final String[] UART_speed = new String[] {"300", "1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200", "230400", "250000"};
-	
+	private PinsPain painPins = new PinsPain();
+	private Oscilograph oscil = new Oscilograph();
+	private final String[] UART_speed = new String[] { "300", "1200", "2400", "4800", "9600", "19200", "38400", "57600","115200", "230400", "250000" };
+
 	private Mode mode = Mode.None;
 	private String modeHelp = "";
+	private PortEventListener translater = null;
 	
 	enum Mode{
-		None, SetSpeed
+		None, SetSpeed, WaiteRet
 	}
 
 	/**
@@ -73,6 +79,10 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				try {
 					MainScreen frame = new MainScreen();
 					frame.setVisible(true);
+					Dimension dim = java.awt.Toolkit.getDefaultToolkit().getScreenSize();    
+					int x = (dim.width-frame.getSize().width)/2;
+					int y = (dim.height-frame.getSize().height)/2;    
+					frame.setLocation(x, y);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -91,19 +101,36 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		JMenuBar menuBar = new JMenuBar();
 		setJMenuBar(menuBar);
 		
+		JPanel mainPanel = new JPanel();
+		mainPanel.setLayout(new BorderLayout(0, 0));
+		
 		JMenu mnNewMenu = new JMenu("Режим работы");
 		menuBar.add(mnNewMenu);
 		
 		JMenuItem mntmNewMenuItem = new JMenuItem("Настройка скорости");
 		mntmNewMenuItem.addActionListener(e->setupPort());
 		mnNewMenu.add(mntmNewMenuItem);
+		
+		painPins.setLocationRelativeTo(this);
+		JMenuItem setPins = new JMenuItem("Настройка IO ног");
+		setPins.addActionListener(e->{
+			if(mode != Mode.None) disableMode();
+			painPins.setVisible(true);
+			});
+		mnNewMenu.add(setPins);
+
+		//oscil.add(oscil);
+		mainPanel.add(oscil);
+		JMenuItem Oscilograph = new JMenuItem("Осцилограф");
+		Oscilograph.addActionListener(e->{
+			mainPanel.add(oscil);
+		});
+		mnNewMenu.add(Oscilograph);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
 		
 		JPanel panel = new JPanel();
-		
-		JPanel panel_1 = new JPanel();
 		
 		JScrollPane scrollPane = new JScrollPane();
 		GroupLayout gl_contentPane = new GroupLayout(contentPane);
@@ -112,7 +139,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				.addGroup(gl_contentPane.createSequentialGroup()
 					.addContainerGap()
 					.addGroup(gl_contentPane.createParallelGroup(Alignment.LEADING)
-						.addComponent(panel_1, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE)
+						.addComponent(mainPanel, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE)
 						.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE)
 						.addComponent(panel, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE))
 					.addContainerGap())
@@ -122,7 +149,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				.addGroup(gl_contentPane.createSequentialGroup()
 					.addComponent(panel, GroupLayout.PREFERRED_SIZE, 29, GroupLayout.PREFERRED_SIZE)
 					.addPreferredGap(ComponentPlacement.UNRELATED)
-					.addComponent(panel_1, GroupLayout.PREFERRED_SIZE, 316, GroupLayout.PREFERRED_SIZE)
+					.addComponent(mainPanel, GroupLayout.PREFERRED_SIZE, 316, GroupLayout.PREFERRED_SIZE)
 					.addPreferredGap(ComponentPlacement.RELATED)
 					.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 57, Short.MAX_VALUE))
 		);
@@ -191,7 +218,27 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		activeComPort();
 		//Выбираем скорость
 		baudRate.setSelectedItem("9600");
+		
+		painPins.addListener((PortEventListener) this);
+		painPins.addListener((StatusEventListener) this);
+		
+		oscil.addListener((PortEventListener) this);
+		oscil.addListener((StatusEventListener) this);
+	}
 
+	/**
+	 * Выключает все моды
+	 */
+	private void disableMode() {
+		switch (mode) {
+		case SetSpeed -> {
+			mode = Mode.None;
+			setStatus(false);
+			appendToPane("Устройство не отвечает", Color.RED);
+		}
+		default ->
+		throw new IllegalArgumentException("Unexpected value: " + mode);
+		}
 	}
 
 	/**
@@ -222,13 +269,13 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		carrentPort.send(req);
 		mode = Mode.SetSpeed;
 		
-		new Timer(500, new TimerTask() {public void run() {
+		new Timer(500, ()-> {
 			if(mode == Mode.SetSpeed) {
 				mode = Mode.None;
 				setStatus(false);
 				appendToPane("Устройство не отвечает", Color.RED);
 			}
-		}});
+		});
 	}
 
 	private void delComPort() {
@@ -269,9 +316,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		setStatus(false);
 		event.start();
 		
-		new Timer(25, new TimerTask() {public void run() {
-			((ComPorts) portSelected.getSelectedItem()).DTR();
-		}});
+		new Timer(25, ()->{((ComPorts) portSelected.getSelectedItem()).DTR();});
 	}
 	
 	public void paint(Graphics g) {
@@ -284,7 +329,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 	public void statusEvent(StatusEvent e) {
 		switch (e.get_Type()) {
 		case PRINT ->textArea.setText(textArea.getText() + e.getMessage());
-		case PRINTLN -> textArea.setText(textArea.getText() + "\n" + e.getMessage());
+		case PRINTLN ->  appendToPane(e.getMessage(), Color.DARK_GRAY);
 		case ERROR -> appendToPane(e.getMessage(), Color.BLUE);
 		case FATAL_ERROR -> appendToPane(e.getMessage(), Color.RED);
 		}
@@ -295,6 +340,10 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		switch (e.get_Type()) {
 		case DATA_IN -> {
 			setStatus(true);
+			if(translater != null) {
+				 translater.portData(e);
+				 return;
+			}
 			switch (mode) {
 			case SetSpeed -> {
 				if(e.getMessage()[0] == STK_OK) {
@@ -306,12 +355,17 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				mode = Mode.None;
 			}
 			default -> {
-				String data = "";
+				String data = "Пришло не понятно кому не понятно что: ";
 				for (byte theByte : e.getMessage())
 					data += String.format("0x%02X ", theByte);
 				appendToPane(data, Color.BLACK);
 			}
 			}
+		}
+		case DATA_OUT -> {
+			if(mode != mode.None) return;
+			ComPorts port = (ComPorts) portSelected.getSelectedItem();
+			port.send(e.getMessage());
 		}
 		}
 	}
@@ -346,5 +400,17 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 	    SimpleDateFormat formatForDateNow = new SimpleDateFormat("hh:mm:ss");
 	      
 		tp.replaceSelection("\n" + formatForDateNow.format(dateNow) + " -> " +  msg);
+	}
+
+	@Override
+	public boolean capture(PortEventListener l) {
+		if(translater != null && translater != l) return false;
+		translater = l;
+		return true;
+	}
+
+	@Override
+	public void liberation() {
+		translater = null;
 	}
 }

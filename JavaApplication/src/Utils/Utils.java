@@ -67,11 +67,10 @@ public class Utils {
 	/**
 	 * Функция паузы, нужна для отрисовки
 	 */
-	@SuppressWarnings("unused")
-	private static void pause(long sec) {
+	static public void pause(long sec) {
 		pauseMs(sec * 1_000);
 	}
-	static void pauseMs(long ms) {
+	static public void pauseMs(long ms) {
 		LockSupport.parkNanos(ms * 1_000_000);
 	}
 	/**
@@ -144,7 +143,7 @@ public class Utils {
 	public static String to_string(byte array_hex[]) {
 		String data = "";
 		for (byte element : array_hex) {
-			data += String.format("%02X", element);
+			data += String.format("%02X ", element);
 		}
 		return data;
 	}

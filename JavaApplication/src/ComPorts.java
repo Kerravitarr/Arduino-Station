@@ -14,7 +14,7 @@ import Utils.COMport;
 import Utils.Setings;
 
 public class ComPorts extends COMport {
-	static final int timeOut = 5; 
+	static final int timeOut = 2; 
 	static HashMap<String, ComPorts> allPorts = new HashMap<>();
 	
 	private List<PortEventListener> listeners = new ArrayList<>();

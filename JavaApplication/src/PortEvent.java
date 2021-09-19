@@ -5,7 +5,10 @@ public class PortEvent extends EventObject{
 	private Type _tp;
 	
 	public static enum Type {
-		DATA_IN
+		/**Данные пришли*/
+		DATA_IN,
+		/**Надо передать данные*/
+		DATA_OUT
 	}
 	public PortEvent(byte[] message, Type tp) {
 		super(message);

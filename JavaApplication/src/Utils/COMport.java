@@ -30,6 +30,7 @@ public abstract class COMport {
 	
 	private int Period;
 	protected String name;
+	BufferIn buffer;
 
 	private List<StatusEventListener> listeners = new ArrayList<>();
 
@@ -42,6 +43,7 @@ public abstract class COMport {
 		Se = aThis;
 		Period = timeOut;
 		name = portName;
+		buffer = new BufferIn();
 	}
 	
 	protected static String[] getComPortsName(Setings Se) {
@@ -129,7 +131,7 @@ public abstract class COMport {
 			msgIn(data, sb.toString());
 		}
 		public void add(byte[] bytes) {
-			if(!timer.isRunning()) LockSupport.parkNanos(1000);
+			if(!timer.isRunning()) LockSupport.parkNanos(1_000_000); //1мс
 			timer.restart();
 			if (msg.length <= lenght + bytes.length) {
 				byte localM[] = new byte[lenght + bytes.length + 10];
@@ -144,7 +146,6 @@ public abstract class COMport {
 		int lenght = 0;
 		
 	}
-	BufferIn buffer = new BufferIn();
 	
 	protected final void init() {
 		close();
