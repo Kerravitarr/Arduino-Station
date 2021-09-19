@@ -647,6 +647,30 @@ UART_End_SET_MODE_work_MyMode:
 		STI AVRISP_c,0 //Начинаем вычитывать
 		RJMP UART_End_SET_MODE_work_MyMode_end
 	notMode_0x07:
+	CPI	tmp2,0x08
+	BRNE /*!=*/ notMode_0x08 //Передать все регистры портов
+		STI Mode,DefaultMode
+		IN MacroR,PINB		//0
+		RCALL UART_Print
+		IN MacroR,DDRB		//1
+		RCALL UART_Print 
+		IN MacroR,PORTB		//2
+		RCALL UART_Print 
+		IN MacroR,PINC		//3
+		RCALL UART_Print 
+		IN MacroR,DDRC		//4
+		RCALL UART_Print 
+		IN MacroR,PORTC		//5
+		RCALL UART_Print 
+		IN MacroR,PIND		//6
+		RCALL UART_Print 
+		IN MacroR,DDRD		//7
+		RCALL UART_Print 
+		IN MacroR,PORTD		//8
+		RCALL UART_Print 
+		UARTPrint STK_OK	//9
+		RJMP UART_End_SET_MODE_work_MyMode_end
+	notMode_0x08:
 	CPI	tmp2,0x20
 	BRNE /*!=*/ notMode_0x20 //Проверка связи
 		STI Mode,DefaultMode
