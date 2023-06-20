@@ -172,9 +172,9 @@ PTQL02:	ret
 
 TaskProcs: 	.dw Idle
 			.equ TS_Idle 				= 0
-			.dw Idle
+			.dw TWI_IO_Erro
 			.equ TS_TWI_IO_Error 		= 1
-			.dw Idle
+			.dw TWI_IO_End
 			.equ TS_TWI_IO_End 			= 2
 			.dw UART_End
 			.equ TS_UART_End 			= 3
@@ -206,4 +206,6 @@ TaskProcs: 	.dw Idle
 			.equ TS_EEPROM_End					= 16
 			.dw UART_SETUP
 			.equ TS_UART_SETUP					= 17
+			.dw StartTWI
+			.equ TS_StartTWI					= 18	//Запуск передачи I2C
 

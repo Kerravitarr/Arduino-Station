@@ -105,7 +105,7 @@ EEPROMPos_c:.byte 1									;Длина сообщения, которым нужно обменяться с EEPROM
 
 TWI_IOc:	.byte 	1								;Число переданных символов
 TWI_IOl:	.byte 	1								;Ожидается символов
-			.equ 	TWISize			 = 20			; Количество символов которые мы ожидаем принять по I2C
+			.equ 	TWISize			 = 20			;Количество символов которые мы ожидаем принять по I2C
 TWI_IO:		.byte 	TWISize							;
 
 
@@ -153,6 +153,16 @@ Mode:		.byte 1									;Режим
 			.equ MY_SETUP_SET_PORTC			= 18	;Сохраняем биты порта C - PORTx (Управление состоянием выходов), DDRx(Настройка разрядов порта x на вход или выход.).
 			.equ MY_SETUP_SET_PORTD			= 19	;Сохраняем биты порта D - PORTx (Управление состоянием выходов), DDRx(Настройка разрядов порта x на вход или выход.).
 			.equ MY_SETUP_SET_ADC			= 20	;Сохраняем настройки АЦП - ADCSRA, ADMUX, каналы
+			.equ MY_SETUP_I2C_W				= 21	;Передаёт сообщение по I2C
+			.equ MY_SETUP_I2C_R				= 22	;Передаёт сообщение по I2C и читает ответ
+			
+
+.equ CRC_EOP   =  0x20 //ok it is a space...
+.equ STK_OK    =  0x10
+.equ STK_FAILED=  0x11
+.equ STK_UNKNOWN= 0x12
+.equ STK_INSYNC=  0x14
+.equ STK_NOSYNC=  0x15
 
 			
 ModeEEPROM:	.byte 1									;Режим для чтения из энергонезависимой памяти

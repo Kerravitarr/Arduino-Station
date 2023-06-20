@@ -110,30 +110,63 @@ EEPROM_Start:
 	EEPROM_Start_end:
 	SBI 	EECR,EERIE	;Устанавливаем прерывание
 RET
+//Запускает I2C на передачу
+StartTWI:
+	LDI tmp1,(1<<TWEN)|(1<<TWIE)|(1<<TWINT)|(1<<TWSTA)			/*разрешаем прерывание и формируем состояние СТАРТ, мастер - это мы!*/
+	UOUT TWCR,tmp1
+	CLI
+		SBIFlag TWI_Busy
+	SEI
+RET
+//Мы закончили писать/читать по I2C
+TWI_IO_End:
+	
+	LDS tmp1,Mode
+	CPI tmp1,MY_SETUP_I2C_W
+	BRNE /*!=*/ TWI_IO_EndMY_SETUP_I2C_W	//Мы удачно записали
+		UARTPrint STK_OK
+		STI Mode,DefaultMode
+		RJMP TIE00
+	TWI_IO_EndMY_SETUP_I2C_W:
+	CPI tmp1,MY_SETUP_I2C_R
+	BRNE /*!=*/ TWI_IO_EndMY_SETUP_I2C_WMY_SETUP_I2C_R	//Мы удачно прочитали
+		LDS tmp1, TWI_IOc //Количество прочитанных байт
+		LDI 	ZL,low(TWI_IO)	//Наше сообщение
+		LDI 	ZH,high(TWI_IO)
+		UARTPrint STK_OK
+		
+		TWI_IO_EndMY_SETUP_I2C_WMY_SETUP_I2C_R_L:
+			UARTPrint_rm Z+
+			DEC tmp1
+		BRNE /*!=*/ TWI_IO_EndMY_SETUP_I2C_WMY_SETUP_I2C_R_L
 
- TWI_IO_End:
-		LDI 	Zl,low(TWI_IO)
-		LDI 	Zh,high(TWI_IO)
-		LD		tmp1,Y
-		/*CPI		OSRG,AddrDev_R
-		BRNE	TIE01
-			RCALL TWI_IO_End_AddrDev_R
-			JMP TIE00
-		TIE01:*/
+		STI Mode,DefaultMode
+		RJMP TIER00
+	TWI_IO_EndMY_SETUP_I2C_WMY_SETUP_I2C_R:
 
-		TIE00:
-			CBIFlag TWI_Busy
+	TIE00:
+		CBIFlag TWI_Busy
+RET
+//Ошибка по I2C
+TWI_IO_Erro:
+	
+	LDS tmp1,Mode
+	CPI tmp1,MY_SETUP_I2C_W
+	BRNE /*!=*/ TWI_IO_ErroMY_SETUP_I2C_W	//Мы удачно записали
+		LDS tmp1,TWI_IOl
+		UARTPrint_r tmp1
+		UARTPrint STK_FAILED
+		STI Mode,DefaultMode
+		RJMP TIER00
+	TWI_IO_ErroMY_SETUP_I2C_W:
+
+	TIER00:
+		CBIFlag TWI_Busy
 RET
 
-
-.equ CRC_EOP   =  0x20 //ok it is a space...
-.equ STK_OK    =  0x10
-.equ STK_FAILED=  0x11
-.equ STK_UNKNOWN= 0x12
-.equ STK_INSYNC=  0x14
-.equ STK_NOSYNC=  0x15
-
-
+//Окончание чтения инфы от компа.
+//Если мы спали, DefaultMode, то этот байт - выбор режима
+//Если мы в режиме - то изучаем что за режим
 UART_End:
 	LDS	tmp2,UART_I
 	LDS tmp1,Mode
@@ -147,6 +180,7 @@ UART_End:
 RET
 
 //Программа выбора мода, активируется, если мода не было, а тут пришёл первый байт
+//tmp2 - это байт, в котором мод.
 UART_End_SET_MODE:
 	LDS	tmp2,UART_I
 	//Ищем режим, в котором мы находимся
@@ -235,6 +269,8 @@ UART_End_SET_MODE:
 RET
 
 //Непосредственно обработка каждого режима из мода
+//Мы уже получили первый байт ранее и поняли, что за мод. Теперь мы проверяем, что за мод - регистр tmp1
+//И в зависимости от этого обрабатываем байт - tmp2
 UART_End_SET_MODE_work:
 	LDS tmp1,Mode
 	LDS	tmp2,UART_I
@@ -543,23 +579,11 @@ UART_End_SET_MODE_work:
 		RCALL readNext_AVRISP
 		LDS tmp1,AVRISP_c
 		CPI tmp1,3
-		BRNE /*!=*/ UART_End_SET_MODE_work_end
-			LDS tmp2,AVRISP
-			//ADCSRA: ADEN ADSC ADATE ADIF ADIE ADPS2 ADPS1 ADPS
-					;  1 - вкл
-					;		1 - запуск преобразования
-					;			1 - позволяет запускать преобразование по прерыванию от переферийных устройств микроконтроллера
-					;					х - Флаг прерываний
-					;						1 - разрешает прерывания от АЦП
-					;							0		0	0 - CLK/2 - частота работы (8МГц)
-					;							0		0	1 - CLK/2 - частота работы (8МГц)
-					;							0		1	0 - CLK/4 - частота работы (4МГц)
-					;							0		1	1 - CLK/8 - частота работы (2МГц)
-					;							1		0	0 - CLK/16 - частота работы (1МГц)
-					;							1		0	1 - CLK/32 - частота работы (500кГц)
-					;							1		1	0 - CLK/64 - частота работы (250кГц)
-					;							1		1	1 - CLK/128 - частота работы (125кГц)
-			UOUT ADCSRA,tmp2
+		BRNE /*!=*/ UART_End_SET_MODE_work_end_bridg
+			LDS tmp2,AVRISP+2
+			STS ADC_chanel,tmp2
+			TST tmp2 //Проверим, а не 0 ли тут?
+			BREQ /*=*/ UART_End_MY_SETUP_SET_ADC_ERROR//МЫ НИ КОГДА НЕ ДОЛЖНЫ ТУДА ПОПАДАТЬ!!!
 			LDS tmp2,AVRISP+1
 			//ADMUX: REFS1 REFS0 ADLAR - MUX3 MUX2 MUX1 MUX0
 					; 0       0 - опорное напряжение на входе AREF
@@ -578,17 +602,68 @@ UART_End_SET_MODE_work:
 					;						1	1	1	0 - 1.1 В
 					;						1	1	1	1 - 0 В (земля)
 			UOUT ADMUX,tmp2
-			LDS tmp2,AVRISP+2
-			STS ADC_chanel,tmp2
-
-			TST tmp2 //Проверим, а не 0 ли тут?
-			BREQ /*=*/ UART_End_SET_MODE_work_end//МЫ НИ КОГДА НЕ ДОЛЖНЫ ТУДА ПОПАДАТЬ!!!
-
+			LDS tmp2,AVRISP
+			//ADCSRA: ADEN ADSC ADATE ADIF ADIE ADPS2 ADPS1 ADPS
+					;  1 - вкл
+					;		1 - запуск преобразования
+					;			1 - позволяет запускать преобразование по прерыванию от переферийных устройств микроконтроллера
+					;					х - Флаг прерываний
+					;						1 - разрешает прерывания от АЦП
+					;							0		0	0 - CLK/2 - частота работы (8МГц)
+					;							0		0	1 - CLK/2 - частота работы (8МГц)
+					;							0		1	0 - CLK/4 - частота работы (4МГц)
+					;							0		1	1 - CLK/8 - частота работы (2МГц)
+					;							1		0	0 - CLK/16 - частота работы (1МГц)
+					;							1		0	1 - CLK/32 - частота работы (500кГц)
+					;							1		1	0 - CLK/64 - частота работы (250кГц)
+					;							1		1	1 - CLK/128 - частота работы (125кГц)
+			UOUT ADCSRA,tmp2
 			STI Mode,DefaultMode
-			UARTPrint STK_OK
 		RJMP UART_End_SET_MODE_work_end
+		UART_End_MY_SETUP_SET_ADC_ERROR:
+			UARTPrint STK_FAILED
+			STI Mode,DefaultMode
 	UART_End_notMY_SETUP_SET_ADC:
 	
+	CPI tmp1,MY_SETUP_I2C_W
+	BRNE /*!=*/ UART_End_notMY_SETUP_I2C_W
+		RCALL readNext_AVRISP
+		LDS tmp1,AVRISP_c
+		LDS tmp2,AVRISP	//Первый байт - длина пакета
+		CP tmp1,tmp2
+		BRNE /*!=*/ UART_End_SET_MODE_work_end
+			LDS		tmp1, AVRISP + 1
+			LSL		tmp1
+			STS		AVRISP + 1, tmp1
+			LDI 	ZL,low(AVRISP + 1)	//Наше сообщение
+			LDI 	ZH,high(AVRISP + 1)
+			LDI 	XL,low(TWI_IO)		//Буфер I2C
+			LDI 	XH,high(TWI_IO)
+			MOV Counter, tmp2
+			UART_End_notMY_SETUP_I2C_W_CMP_L:
+				DEC tmp2
+				BREQ /*=*/ UART_End_notMY_SETUP_I2C_W_CMP	//Копируем наше сообщение
+				LD tmp1, Z+
+				ST X+,tmp1
+			RJMP UART_End_notMY_SETUP_I2C_W_CMP_L
+			UART_End_notMY_SETUP_I2C_W_CMP:
+			LDS tmp2,AVRISP	//Первый байт - длина пакета
+			DEC tmp2 //Ибо без длины пакета
+			I2CStart_r tmp2
+	UART_End_notMY_SETUP_I2C_W:
+
+	CPI tmp1,MY_SETUP_I2C_R
+	BRNE /*!=*/ UART_End_notMY_SETUP_I2C_R
+		RCALL readNext_AVRISP
+		LDS tmp1,AVRISP_c
+		CPI tmp1,2
+		BRNE /*!=*/ UART_End_SET_MODE_work_end
+			LDS tmp1,AVRISP			//Адрес
+			LSL	tmp1
+			INC tmp1				//Будем читать
+			LDS tmp2,AVRISP + 1		//Длина
+			I2CRead_r tmp2,tmp1
+	UART_End_notMY_SETUP_I2C_R:
 
 	UART_End_SET_MODE_work_end:
 RET
@@ -613,7 +688,8 @@ readNext_AVRISP:
 	POP tmp1
 RET
 
-//Выбор моего собственного мода
+//У нас первый байт был - мой мод. Теперь второй байт,
+//Надо понять что именно за мод
 UART_End_SET_MODE_work_MyMode:
 	LDS	tmp2,UART_I
 	//Ищем режим, в котором мы находимся
@@ -671,6 +747,18 @@ UART_End_SET_MODE_work_MyMode:
 		UARTPrint STK_OK	//9
 		RJMP UART_End_SET_MODE_work_MyMode_end
 	notMode_0x08:
+	CPI	tmp2,0x09
+	BRNE /*!=*/ notMode_0x09	//Послать сообщение по I2C
+		STI Mode,MY_SETUP_I2C_W
+		STI AVRISP_c,0 //Начинаем вычитывать
+		RJMP UART_End_SET_MODE_work_MyMode_end
+	notMode_0x09:
+	CPI	tmp2,0x0A
+	BRNE /*!=*/ notMode_0x0A	//Послать сообщение по I2C
+		STI Mode,MY_SETUP_I2C_R
+		STI AVRISP_c,0 //Начинаем вычитывать
+		RJMP UART_End_SET_MODE_work_MyMode_end
+	notMode_0x0A:
 	CPI	tmp2,0x20
 	BRNE /*!=*/ notMode_0x20 //Проверка связи
 		STI Mode,DefaultMode
@@ -678,7 +766,7 @@ UART_End_SET_MODE_work_MyMode:
 		RJMP UART_End_SET_MODE_work_MyMode_end
 	notMode_0x20:
 
-	UARTPrint STK_FAILED
+	UARTPrint STK_UNKNOWN
 	STI Mode,DefaultMode
 	UART_End_SET_MODE_work_MyMode_end:
 RET

@@ -4,22 +4,25 @@
  *  Created: 11.05.2021 22:47:03
  *   Author: Terran
  */ 
- 
+ //Убирает флаг из памяти флагов
  .MACRO CBIFlag
 	LDS MacroR,Flag
 	ANDI MacroR, ~(1 << @0)
 	STS Flag,MacroR
  .ENDMACRO
+ //Проверяет наличие флага в памяти флагов
   .MACRO TSTFlag
 	LDS MacroR,Flag
 	ANDI MacroR,(1 << @0)
  .ENDMACRO
+ //Устанавливает флаг в памяти флагов
  .MACRO SBIFlag
 	LDS MacroR,Flag
 	ORI MacroR, (1 << @0)
 	STS Flag,MacroR
  .ENDMACRO
 
+ 
   .MACRO 	OUTI				; Ёто описание макроса. ¬езде где outi встретитс¤ в коде, то замен¤етс¤ на 
 	LDI 	MacroR,@1 			; этот кусок кода, причем @0,@1 это параметры, они замен¤тс¤ введенными параметрами
 	OUT 	@0,MacroR 			; макроса. ?анный макрос тупо копирует введенное число сначала в регистр R16, а из него 
@@ -38,22 +41,59 @@
       	LDS	@0,@1
    	.endif
 .ENDMACRO
- .MACRO STI
+//Сохраняет число в память. Память=Число
+.MACRO STI
 	LDI MacroR,@1
 	STS @0,MacroR
- .ENDMACRO
+.ENDMACRO
+//Прибавляет число к регистру. Регистр += число
 .MACRO		ADI
 	SUBI	@0,-@1
 .ENDMACRO
+//Загружает число в регистр (если это нижний регистр!!!) Регистр=число
  .MACRO LDIl
 	LDI MacroR,@1
 	MOV @0,MacroR
  .ENDMACRO
-
+ //Печатает в УАРТ символ
  .MACRO UARTPrint
 	LDI MacroR,@0
 	CALL UART_Print
  .ENDM
+ //Печатает в УАРТ символ из памяти
+ .MACRO UARTPrint_m
+	LDS MacroR,@0
+	CALL UART_Print
+ .ENDM
+ //Печатает в УАРТ символ из регистра
+ .MACRO UARTPrint_r
+	MOV MacroR,@0
+	CALL UART_Print
+ .ENDM
+ //Печатает в УАРТ символ из регистровой пары
+ .MACRO UARTPrint_rm
+	LD MacroR,@0
+	CALL UART_Print
+ .ENDM
+ //Макрос для запуска I2С писалки с одним параметром - длиной пакета
+.MACRO I2CStart
+		STI TWI_IOc, 0			//Обнуляем длину сообщения
+		STI TWI_IOl, @0			//Длина передаваемого сообщения
+		SetTask TS_StartTWI		//Запускаем запись
+.ENDMACRO
+ //Макрос для запуска I2С писалки с одним параметром - регистром, где лежит длина пакета
+.MACRO I2CStart_r
+		STI TWI_IOc, 0			//Обнуляем длину сообщения
+		STS TWI_IOl, @0			//Длина передаваемого сообщения
+		SetTask TS_StartTWI		//Запускаем запись
+.ENDMACRO
+ //Макрос для запуска I2С читалки с двумя параметрами - регистром длины данных и регистром-адресом
+.MACRO I2CRead_r
+		STI TWI_IOc, 0			//Обнуляем длину сообщения
+		STS TWI_IOl, @0			//Длина передаваемого сообщения
+		STS TWI_IO, @1			//Адрес нашей цели
+		SetTask TS_StartTWI		//Запускаем запись
+.ENDMACRO
 
 .MACRO SetTask
 		ldi MacroR, @0			; Обращение к процедуре через событийный диспетчер

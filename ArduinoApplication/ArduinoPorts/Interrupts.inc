@@ -136,9 +136,7 @@ TWI_Event:
 
 		CPI	interrupt,0x20			//SLA+W+NACK Мы отправили адрес с битом записи, а нас послали NACK. Обидно, сгенерим ошибку или повторим еще раз.
 		BRNE	TWIE20
-				//Обработка
-				SetTask TS_TWI_IO_Error
-				RJMP TWIE_SEND_STOP
+				RJMP TWIE_SEND_ERROR
 		TWIE20:
 
 
@@ -180,20 +178,21 @@ TWI_Event:
 		CPI	interrupt,0x40		//SLA+R+ACK Послали адрес с битом на чтение, а ведомый отозвался. Хорошо! Будем читать.
 		BRNE	TWIE40
 			TSTFlag TWI_Busy
-			BRNE /*!=*/ TWIE4002//Наш автобус не занят, ни чего не ждали, пошло оно всё, ни чего не знаем
+			BREQ /*=*/ TWIE4002//Наш автобус не занят, ни чего не ждали, пошло оно всё, ни чего не знаем
 				//Кто то ожидает чего то, отлично. Читаем!
+				LDI		interrupt,0	
+				STS		TWI_IOc,interrupt	//Записали один символ
 				RJMP TWIE_SEND_ACK
 			TWIE4002:
 				//Ни чего не знаем, это не мы
 			RJMP TWIE_SEND_NACK
 		TWIE40:
-/*
-		CPI	OSRG,0x48			//SLA+R+NACK Крикнули в шину «Эй ты, с адресом ХХХ, почитай нам сказки» А в ответ «Иди NACK!» В смысле на запрос адреса с битом чтения никто не откликнулся. Видимо не хотят или заняты. Также может быть никого нет дома.
+
+		CPI	interrupt,0x48			//SLA+R+NACK Крикнули в шину «Эй ты, с адресом ХХХ, почитай нам сказки» А в ответ «Иди NACK!» В смысле на запрос адреса с битом чтения никто не откликнулся. Видимо не хотят или заняты. Также может быть никого нет дома.
 		BRNE	TWIE48
-				//Обработка
-				RJMP TWIE00
+				RJMP TWIE_SEND_ERROR
 		TWIE48:
-*/
+
 		CPI	interrupt,0x50 		//Receive Byte Мы приняли байт. И думаем что бы ответить ведомому. ACK или NACK.
 		BRNE	TWIE50	
 			LDS		interrupt,TWI_IOc		//Сколько мы прочитали
@@ -208,10 +207,12 @@ TWI_Event:
 				STS		TWI_IOc,interrupt
 				LDS		MacroR,TWDR
 				ST		Z,MacroR		//Вот мы и сохранили наш байт
-				CPI		interrupt,TWISize
+				LDS		MacroR,TWI_IOl
+				CP		interrupt,MacroR
 				BRNE /*!=*/ TWIE_SEND_ACK //Всё ок, место есть
 					//Проблемка, это был последний. Надо что то сделать, срочно. Или будет беда
-					SetTask TS_TWI_IO_End		
+					SetTask TS_TWI_IO_End	
+					RJMP TWIE_SEND_NACK		//Пошёл он NACK
 			RJMP TWIE_SEND_ACK
 		TWIE50:
 
@@ -302,6 +303,15 @@ TWI_Event:
 		TWEN — блок TWI включен. Только и всего.
 		TWIE — прерывания от TWI разрешены.
 	*/
+	//Если ни чего не подошло - то мы выходим отсюда нафиг!
+
+	//Ошибка!
+	TWIE_SEND_ERROR:
+		SetTask TS_TWI_IO_Error
+		STS	TWI_IOl, interrupt	//Записали код ошибка!
+	RJMP TWIE_SEND_STOP
+
+
 	TWIE_SEND_ACK:
 		LDI interrupt,(1<<TWINT)|(1<<TWEA)|(1<<TWEN)|(1<<TWIE)
 		RJMP TWIE_SEND
@@ -449,11 +459,17 @@ ADCend:
 	//Всё отлично, уарт не запущен.
 	UIN	MacroR,ADCH
 	RCALL UART_Print_withuotCLI
+	//Останавливаем АЦП
+	UIN interrupt,AVRISP
+	ANDI interrupt,~(1 << ADSC) //Стоп!
+	UOUT AVRISP,interrupt	
 	//Выбираем следующий канал
 	UIN interrupt,ADMUX
 	ANDI interrupt,0x0F
-	BREQ /*=*/ ADCend_end//У нас измерение не каналов, выходим
+	CPI interrupt,8
+	BRSH /*>=*/ ADCend_stop//У нас измерение не каналов, выходим
 		LDI tmp1,1
+		INC interrupt //Так как каналы нумеруются с 0
 		ADCend_cyc:
 			DEC interrupt
 			BREQ /*=*/ ADCend_end_cyc
@@ -475,7 +491,7 @@ ADCend:
 			AND MacroR,tmp1
 		BREQ /*=*/ ADCend_cyc2 //Пока равно, начинаем с самого начала
 		MOV MacroR,tmp1
-		CLR tmp1
+		SER tmp1
 		ADCend_cyc3:
 			INC tmp1
 			LSR MacroR
@@ -490,7 +506,10 @@ ADCend:
 		UIN interrupt,AVRISP
 		ORI	interrupt,(1 << ADSC) //Запуск!
 		UOUT AVRISP,interrupt	
-
+		RJMP ADCend_end
+	ADCend_stop:
+		CLR	interrupt //Полная остановка
+		UOUT ADCSRA,interrupt	
 	ADCend_end:
 
 	POP 	interrupt				; Восстанавливаем регистры
