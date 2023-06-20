@@ -3,12 +3,24 @@ package Utils;
 import java.util.EventObject;
 
 public class StatusEvent extends EventObject {
+	/**Что за сообщение*/
 	private String message;
+	/**Его тип*/
 	private Type _tp;
+	/**Ошибка, если есть*/
 	private Exception exc = null;
-	
-	public static enum Type {
-		PRINT,NON,PRINTLN, ERROR, FATAL_ERROR
+	/**Тип сообщений*/
+	public enum Type {
+		/**Напечатать сообщение в окошечке*/
+		PRINT, 
+		/**Пустота, ничего*/
+		NON, 
+		/**Напечатать сообщение с добавлением ентера*/
+		PRINTLN, 
+		/**Собщение ошибки*/
+		ERROR, 
+		/**Сообщение критической ошибки*/
+		FATAL_ERROR
 	}
 	public StatusEvent(String message, Type tp) {
 		super(message);

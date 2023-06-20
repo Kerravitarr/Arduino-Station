@@ -1,15 +1,15 @@
+package start;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TimerTask;
 
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
@@ -17,6 +17,8 @@ import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
 import javax.swing.border.TitledBorder;
+import javax.swing.event.AncestorEvent;
+import javax.swing.event.AncestorListener;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
@@ -25,12 +27,8 @@ import Utils.StatusEvent;
 import Utils.StatusEventListener;
 import Utils.Timer;
 import Utils.Utils;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.ActionEvent;
 
-public class PinsPain extends JDialog implements PortEventListener{
+public class PinsPain extends JPanel implements PortEventListener{
 	
 	private static class BYTE_3 {
 		private byte B = 0x00;
@@ -97,6 +95,7 @@ public class PinsPain extends JDialog implements PortEventListener{
 		 * @param pin
 		 * @return 1 - нога подключена к +5В (или подтянута к ним)
 		 */
+		@Override
 		public byte getState(char p, byte pin) {
 			return super.getState(p, pin);
 		}
@@ -398,7 +397,6 @@ public class PinsPain extends JDialog implements PortEventListener{
 		None,Syn, Update
 	}
 
-	private final JPanel contentPanel = new JPanel();
 	private PORTPanel PORTB;
 	private PORTPanel PORTC;
 	private PORTPanel PORTD;
@@ -413,6 +411,7 @@ public class PinsPain extends JDialog implements PortEventListener{
 	private JButton btnNewButton;
 	private JPanel panel_2;
 	private JPanel panel_3;
+	/**Галочка автосинхронизации*/
 	private JCheckBox autoCyn;
 	private JButton btnNewButton_1;
 	private PortEventListener listener = null;
@@ -426,29 +425,25 @@ public class PinsPain extends JDialog implements PortEventListener{
 	 * Create the dialog.
 	 */
 	public PinsPain() {
-		addWindowListener(new WindowAdapter() {
-			public void windowOpened(WindowEvent e) {
+		addAncestorListener(new AncestorListener() {
+			public void ancestorAdded(AncestorEvent event) {
 				capture();
 				mode = Mode.Syn;
 				dispatchEvent(new PortEvent(REQ_GETSTATUS, PortEvent.Type.DATA_OUT));
 			}
-			public void windowDeactivated(WindowEvent e) {
+			public void ancestorMoved(AncestorEvent event) {
+			}
+			public void ancestorRemoved(AncestorEvent event) {
 				listener.liberation();
 				autoCyn.setSelected(false);
 				mode = Mode.None;
 			}
 		});
-
-        setAlwaysOnTop(true);
-		setResizable(false);
-		setBounds(100, 100, 510, 329);
-		getContentPane().setLayout(new BorderLayout());
-		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-		getContentPane().add(contentPanel, BorderLayout.CENTER);
-		contentPanel.setLayout(new BorderLayout(0, 0));
+		this.setBorder(new EmptyBorder(5, 5, 5, 5));
+		this.setLayout(new BorderLayout(0, 0));
 		
 		JPanel panel = new JPanel();
-		contentPanel.add(panel, BorderLayout.CENTER);
+		this.add(panel, BorderLayout.CENTER);
 		panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
 		{
 			PORTB = new PORTPanel('B',(byte) 6);
@@ -460,7 +455,7 @@ public class PinsPain extends JDialog implements PortEventListener{
 		}
 		
 		panel_1 = new JPanel();
-		contentPanel.add(panel_1, BorderLayout.SOUTH);
+		this.add(panel_1, BorderLayout.SOUTH);
 		panel_1.setLayout(new BorderLayout(0, 0));
 		
 		panel_2 = new JPanel();
@@ -487,7 +482,6 @@ public class PinsPain extends JDialog implements PortEventListener{
 		autoCyn.setToolTipText("Автоматически отправляет на дуню изменения и читает состояния");
 		panel_3.add(autoCyn);
 	}
-
 	private void update() {
 		if(mode == Mode.Update) return;
 		capture();
@@ -515,6 +509,22 @@ public class PinsPain extends JDialog implements PortEventListener{
 			mode = Mode.None;
 		}
 	}
+
+	
+	private void updateState(byte[] validMsg, boolean All) {
+		if (All) {
+			nowPORT = new PORT(validMsg[2], validMsg[5], validMsg[8]);
+			nowDDR = new DDR(validMsg[1], validMsg[4], validMsg[7]);
+		}
+		oldPORT = new PORT(validMsg[2], validMsg[5], validMsg[8]);
+		oldDDR = new DDR(validMsg[1], validMsg[4], validMsg[7]);
+		oldPIN = new PIN(validMsg[0], validMsg[3], validMsg[6]);
+
+		PORTB.update();
+		PORTC.update();
+		PORTD.update();
+	}
+	
 
 	public void portData(PortEvent e) {
 		if(e.get_Type() != PortEvent.Type.DATA_IN) return;
@@ -551,22 +561,6 @@ public class PinsPain extends JDialog implements PortEventListener{
 		}
 		}
 	}
-	
-	private void updateState(byte[] validMsg, boolean All) {
-		if (All) {
-			nowPORT = new PORT(validMsg[2], validMsg[5], validMsg[8]);
-			nowDDR = new DDR(validMsg[1], validMsg[4], validMsg[7]);
-		}
-		oldPORT = new PORT(validMsg[2], validMsg[5], validMsg[8]);
-		oldDDR = new DDR(validMsg[1], validMsg[4], validMsg[7]);
-		oldPIN = new PIN(validMsg[0], validMsg[3], validMsg[6]);
-
-		PORTB.update();
-		PORTC.update();
-		PORTD.update();
-	}
-	
-	
 	
 	final public void addListener(PortEventListener listener) {
 		this.listener = listener;

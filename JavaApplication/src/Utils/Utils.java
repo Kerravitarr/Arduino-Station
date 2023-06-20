@@ -147,6 +147,13 @@ public class Utils {
 		}
 		return data;
 	}
+	public static String to_string(int array_hex[]) {
+		String data = "";
+		for (var element : array_hex) {
+			data += String.format("%X ", element);
+		}
+		return data;
+	}
 
 	/**
 	 * Преобразует строку формата HH HH HH в массив байт

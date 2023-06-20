@@ -1,7 +1,10 @@
+package start;
+
 
 
 public interface PortEventListener {
 	final byte STK_OK = 0x10;
+	final byte STK_FAILED = 0x11;
 
 	public void portData(PortEvent e);
 	

@@ -1,3 +1,6 @@
+package start;
+
+import ComPort.RealCOM;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -9,14 +12,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.TimerTask;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.GroupLayout;
 import javax.swing.GroupLayout.Alignment;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -34,8 +35,9 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyleContext;
 
-import Utils.COMport;
-import Utils.Setings;
+import ComPort.COMport;
+import ComPort.EasyReq;
+import ComPort.Settings;
 import Utils.StatusEvent;
 import Utils.StatusEventListener;
 import Utils.Timer;
@@ -44,22 +46,25 @@ import WorkingModes.WorkingModes;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.JMenuBar;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 
 public class MainScreen extends JFrame  implements PortEventListener, StatusEventListener{
 
 	private JPanel contentPane;
 	
-	public final Setings Se = new Setings();
-	JComboBox<ComPorts> portSelected = new JComboBox<ComPorts>();
+	JComboBox<RealCOM> portSelected = new JComboBox<RealCOM>();
 	JPopupMenu menuAddDelComPort = new JPopupMenu();
 	JTextPane textArea = new JTextPane();
 	JPanel StatusPanel = new JPanel();
 	JLabel lblNewLabel = new JLabel("O");
 	JComboBox<String> baudRate = new JComboBox<String>();
+	/**Панель с высоким/низким уровнем по каждому пину*/
 	private PinsPain painPins = new PinsPain();
+	/**Осцилограф*/
 	private Oscilograph oscil = new Oscilograph();
+	/**Расшритель портов*/
+	private ManyPorts maniOutPorts = new ManyPorts();
+	/**Модуль I2C*/
+	private I2C i2c = new I2C();
 	private final String[] UART_speed = new String[] { "300", "1200", "2400", "4800", "9600", "19200", "38400", "57600","115200", "230400", "250000" };
 
 	private Mode mode = Mode.None;
@@ -111,21 +116,40 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		mntmNewMenuItem.addActionListener(e->setupPort());
 		mnNewMenu.add(mntmNewMenuItem);
 		
-		painPins.setLocationRelativeTo(this);
+		//painPins.setLocationRelativeTo(this);
 		JMenuItem setPins = new JMenuItem("Настройка IO ног");
 		setPins.addActionListener(e->{
 			if(mode != Mode.None) disableMode();
-			painPins.setVisible(true);
+			mainPanel.remove(0);
+			mainPanel.add(painPins);
+			mainPanel.updateUI();
 			});
 		mnNewMenu.add(setPins);
 
-		//oscil.add(oscil);
-		mainPanel.add(oscil);
+		//mainPanel.add(oscil);
+		mainPanel.add(painPins);
 		JMenuItem Oscilograph = new JMenuItem("Осцилограф");
 		Oscilograph.addActionListener(e->{
+			mainPanel.remove(0);
 			mainPanel.add(oscil);
+			mainPanel.updateUI();
 		});
 		mnNewMenu.add(Oscilograph);
+		JMenuItem manyPorts = new JMenuItem("Расширитель выходов");
+		manyPorts.addActionListener(e->{
+			mainPanel.remove(0);
+			mainPanel.add(maniOutPorts);
+			mainPanel.updateUI();
+		});
+		mnNewMenu.add(manyPorts);
+		
+		JMenuItem menu_i2c = new JMenuItem("I2C");
+		menu_i2c.addActionListener(e-> {
+			mainPanel.remove(0);
+			mainPanel.add(i2c);
+			mainPanel.updateUI();
+		});
+		mnNewMenu.add(menu_i2c);
 		contentPane = new JPanel();
 		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 		setContentPane(contentPane);
@@ -135,13 +159,13 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		JScrollPane scrollPane = new JScrollPane();
 		GroupLayout gl_contentPane = new GroupLayout(contentPane);
 		gl_contentPane.setHorizontalGroup(
-			gl_contentPane.createParallelGroup(Alignment.LEADING)
-				.addGroup(gl_contentPane.createSequentialGroup()
+			gl_contentPane.createParallelGroup(Alignment.TRAILING)
+				.addGroup(Alignment.LEADING, gl_contentPane.createSequentialGroup()
 					.addContainerGap()
 					.addGroup(gl_contentPane.createParallelGroup(Alignment.LEADING)
-						.addComponent(mainPanel, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE)
-						.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE)
-						.addComponent(panel, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 610, Short.MAX_VALUE))
+						.addComponent(mainPanel, GroupLayout.PREFERRED_SIZE, 610, Short.MAX_VALUE)
+						.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 681, Short.MAX_VALUE)
+						.addComponent(panel, Alignment.TRAILING, GroupLayout.DEFAULT_SIZE, 681, Short.MAX_VALUE))
 					.addContainerGap())
 		);
 		gl_contentPane.setVerticalGroup(
@@ -149,9 +173,9 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				.addGroup(gl_contentPane.createSequentialGroup()
 					.addComponent(panel, GroupLayout.PREFERRED_SIZE, 29, GroupLayout.PREFERRED_SIZE)
 					.addPreferredGap(ComponentPlacement.UNRELATED)
-					.addComponent(mainPanel, GroupLayout.PREFERRED_SIZE, 316, GroupLayout.PREFERRED_SIZE)
+					.addComponent(mainPanel, GroupLayout.DEFAULT_SIZE, 316, Short.MAX_VALUE)
 					.addPreferredGap(ComponentPlacement.RELATED)
-					.addComponent(scrollPane, GroupLayout.DEFAULT_SIZE, 57, Short.MAX_VALUE))
+					.addComponent(scrollPane, GroupLayout.PREFERRED_SIZE, 57, GroupLayout.PREFERRED_SIZE))
 		);
 		
 		scrollPane.setViewportView(textArea);
@@ -162,7 +186,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 			String result = JOptionPane.showInputDialog(this,"<html><h2>Введите название COM порта");
 			if(result != null) {
 				COMport.addMemoryPort(result);
-				Se.set("LastPort", result); //Вот тут криво... Мне нужно, чтобы порт автоматом переключался, но как это сделать - я хз :\
+				Utils.Constants.Settings.set("LastPort", result); //Вот тут криво... Мне нужно, чтобы порт автоматом переключался, но как это сделать - я хз :\
 				activeComPort();
 			}
 		});
@@ -195,15 +219,19 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		});
 		portSelected.setToolTipText("Выбор COMпорта.\r\nПо ПКМ можно добавить/удалить\r\nэлементы");
 		
-		baudRate.addActionListener(new ActionListener() {@SuppressWarnings("unchecked")
-		public void actionPerformed(ActionEvent e) {
-			((ComPorts) portSelected.getSelectedItem()).setBaud(Integer.parseInt(((JComboBox<String>)e.getSource()).getSelectedItem().toString()));
-		}});
+		baudRate.addActionListener(new ActionListener() {
+			@SuppressWarnings("unchecked")
+			public void actionPerformed(ActionEvent e) {
+				int boud = Integer.parseInt(((JComboBox<String>) e.getSource()).getSelectedItem().toString());
+				((RealCOM) portSelected.getSelectedItem()).setBaud(boud);
+				oscil.setBoud(boud);
+			}
+		});
 		baudRate.setModel(new DefaultComboBoxModel<String>(UART_speed));
 		panel_4.add(baudRate);
 		
 		JButton btnNewButton = new JButton("RST");
-		btnNewButton.addActionListener(e->((ComPorts) portSelected.getSelectedItem()).DTR());
+		btnNewButton.addActionListener(e->((RealCOM) portSelected.getSelectedItem()).DTR());
 		panel_4.add(btnNewButton);
 		btnNewButton.setToolTipText("Послать сигнал сброса");
 		
@@ -224,6 +252,9 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 		
 		oscil.addListener((PortEventListener) this);
 		oscil.addListener((StatusEventListener) this);
+		
+		i2c.addListener((PortEventListener) this);
+		i2c.addListener((StatusEventListener) this);
 	}
 
 	/**
@@ -257,7 +288,7 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 			return;
 		}
 		
-		ComPorts carrentPort = (ComPorts) portSelected.getSelectedItem();
+		RealCOM carrentPort = (RealCOM) portSelected.getSelectedItem();
 		byte[] req = {0x00,0x03,0x00,0x00};
 		
 		int F_CPU = 16000000;
@@ -279,24 +310,24 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 	}
 
 	private void delComPort() {
-		ComPorts event = (ComPorts) portSelected.getSelectedItem();
+		RealCOM event = (RealCOM) portSelected.getSelectedItem();
 		COMport.delMemoryPort(event.toString());
 		activeComPort();
 	}
 
 	private void activeComPort() {		
-		DefaultComboBoxModel<ComPorts> comPorts = new DefaultComboBoxModel<>();
-		for(ComPorts i : ComPorts.getComPorts(Se)) {
+		DefaultComboBoxModel<RealCOM> comPorts = new DefaultComboBoxModel<>();
+		for(RealCOM i : RealCOM.getComPorts()) {
 			comPorts.addElement(i); 
-			i.addListener((PortEventListener) this);
-			i.addListener((StatusEventListener) this);
+			//i.addListener((PortEventListener) this);
+			//i.addListener((StatusEventListener) this);
 		}
 		portSelected.setModel(comPorts);
 		
 		try {
 			String name = COMport.getLastPortName();	
 			for (int i = 0; i < portSelected.getModel().getSize(); i++) {
-				ComPorts element = portSelected.getModel().getElementAt(i);
+				RealCOM element = portSelected.getModel().getElementAt(i);
 				if (element.toString().equals(name)) {
 					portSelected.setSelectedIndex(i);
 					return;
@@ -310,13 +341,19 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 
 	private void SelectCom() {
 		
-		ComPorts event = (ComPorts) portSelected.getSelectedItem();
+		RealCOM event = (RealCOM) portSelected.getSelectedItem();
 		if(event.isActive()) return;
 		
 		setStatus(false);
 		event.start();
+		Utils.Constants.COM_PORT.set(event);
 		
-		new Timer(25, ()->{((ComPorts) portSelected.getSelectedItem()).DTR();});
+		new Timer(25, () -> {
+			((COMport) portSelected.getSelectedItem()).DTR();
+			Utils.Constants.COM_PORT.lock(MainScreen.this);
+			setStatus(Utils.Constants.COM_PORT.write(new EasyReq.Ping()).answer == Settings.ANSWER.STK_OK);
+			Utils.Constants.COM_PORT.unlock(MainScreen.this);
+		});
 	}
 	
 	public void paint(Graphics g) {
@@ -345,28 +382,33 @@ public class MainScreen extends JFrame  implements PortEventListener, StatusEven
 				 return;
 			}
 			switch (mode) {
-			case SetSpeed -> {
-				if(e.getMessage()[0] == STK_OK) {
-					appendToPane("Установлена новая скорость " + modeHelp +" бод", Color.BLACK);
-					baudRate.setSelectedItem(modeHelp);
-				} else {
-					appendToPane("Ошибка настройки на новую скорость", Color.RED);
+				case SetSpeed -> {
+					if(e.getMessage()[0] == STK_OK) {
+						appendToPane("Установлена новая скорость " + modeHelp +" бод", Color.BLACK);
+						baudRate.setSelectedItem(modeHelp);
+					} else {
+						appendToPane("Ошибка настройки на новую скорость", Color.RED);
+					}
+					mode = Mode.None;
 				}
-				mode = Mode.None;
-			}
-			default -> {
-				String data = "Пришло не понятно кому не понятно что: ";
-				for (byte theByte : e.getMessage())
-					data += String.format("0x%02X ", theByte);
-				appendToPane(data, Color.BLACK);
-			}
+				default -> {
+					String data = "Пришло не понятно кому не понятно что: ";
+					for (byte theByte : e.getMessage())
+						data += String.format("0x%02X ", theByte);
+					appendToPane(data, Color.BLACK);
+				}
 			}
 		}
 		case DATA_OUT -> {
 			if(mode != mode.None) return;
-			ComPorts port = (ComPorts) portSelected.getSelectedItem();
+			RealCOM port = (RealCOM) portSelected.getSelectedItem();
 			port.send(e.getMessage());
 		}
+		case SET_LENGHT ->{
+			RealCOM port = (RealCOM) portSelected.getSelectedItem();
+			port.setLenght(e.getMessage()[0]);
+		}
+
 		}
 	}
 
